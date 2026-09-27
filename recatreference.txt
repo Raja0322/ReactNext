@@ -1,0 +1,681 @@
+Yes. Your project **can absolutely be understood using your familiar Spring Boot Controller → Service → DTO/POJO → Repository style**.
+
+The important point is that Next.js does not use exactly the same names, but the responsibilities are very similar. Your project itself separates route pages, API routes, services, typed clients, types, and UI features. 
+
+## First: map Next.js to Spring Boot
+
+Think of your application like this:
+
+| Your Java/Spring Boot world | This Next.js project            |
+| --------------------------- | ------------------------------- |
+| `Controller`                | `app/api/**/route.ts`           |
+| `Service`                   | `services/*-service.ts`         |
+| DTO / POJO                  | `types.ts`                      |
+| Validation DTO              | `schema.ts` using Zod           |
+| REST client / Feign client  | `*-api.ts`                      |
+| Repository / mock DB        | `entity-data.ts` / fixture data |
+| JSP/React screen            | `.tsx` components               |
+| Controller path variable    | `[id]` + `params.id`            |
+| Main layout                 | `app/layout.tsx` + `AppShell`   |
+
+Your supplied architecture explicitly has `entity-api.ts` as the browser-side API client and `entity-service.ts` as the server-only entity adapter; screening follows the same pattern. 
+
+---
+
+# 1. Entity Search flow
+
+When the user searches **Meridian**, think of this Spring Boot flow:
+
+```text
+Browser/UI
+   ↓
+REST Client
+   ↓
+Controller
+   ↓
+Service
+   ↓
+Data
+```
+
+In your actual project:
+
+```text
+EntitySearch.tsx
+      ↓
+entity-api.ts
+      ↓
+GET /api/entities?q=Meridian
+      ↓
+app/api/entities/route.ts
+      ↓
+entity-service.ts
+      ↓
+entity-data.ts
+      ↓
+Entity[]
+      ↓
+back to UI
+```
+
+Let's connect this to Java.
+
+### UI — `entity-search.tsx`
+
+This is basically your frontend React screen.
+
+User enters:
+
+```text
+Meridian
+```
+
+and clicks Search.
+
+The UI does not directly search your mock data. Your architecture intentionally makes UI components call typed API clients rather than scattering `fetch()` everywhere. 
+
+Think:
+
+```java
+// Concept only
+
+searchButtonClicked() {
+    entityApi.search("Meridian");
+}
+```
+
+---
+
+# 2. `entity-api.ts` = frontend REST/Feign client
+
+Think of this as similar to your Spring Boot:
+
+```java
+@FeignClient(...)
+public interface EntityClient {
+
+    @GetMapping("/api/entities")
+    EntitySearchResponse search(
+        @RequestParam String q
+    );
+}
+```
+
+Next.js/browser equivalent:
+
+```text
+entity-api.ts
+     ↓
+fetch("/api/entities?q=Meridian")
+```
+
+So remember:
+
+> **`entity-api.ts` = client calling an API.**
+
+---
+
+# 3. `app/api/entities/route.ts` = Controller
+
+This is the closest match to your familiar:
+
+```java
+@RestController
+@RequestMapping("/api/entities")
+public class EntityController {
+```
+
+Your actual Next.js file has:
+
+```ts
+export async function GET(request: NextRequest) {
+```
+
+and later:
+
+```ts
+const entities =
+    await searchEntities(result.data.query);
+```
+
+then:
+
+```ts
+return NextResponse.json({
+    query: result.data.query,
+    entities
+});
+```
+
+
+
+Java equivalent:
+
+```java
+@GetMapping
+public ResponseEntity<EntitySearchResponse> search(
+        @RequestParam String q) {
+
+    List<Entity> entities =
+        entityService.searchEntities(q);
+
+    return ResponseEntity.ok(
+        new EntitySearchResponse(q, entities)
+    );
+}
+```
+
+So:
+
+```text
+route.ts
+≈
+@RestController
+```
+
+---
+
+# 4. `schema.ts` = request validation
+
+Your controller does validation before calling the service.
+
+You have:
+
+```ts
+entitySearchRequestSchema.safeParse(...)
+```
+
+Conceptually similar to Java:
+
+```java
+@NotBlank
+@Size(min = 1, max = 120)
+private String query;
+```
+
+with:
+
+```java
+@Valid
+```
+
+So:
+
+```text
+schema.ts
+    ↓
+Validate request
+
+similar to
+
+Java Bean Validation
+@NotNull
+@NotBlank
+@Size
+@Pattern
+```
+
+---
+
+# 5. `entity-service.ts` = Service layer
+
+Then your Controller calls:
+
+```ts
+searchEntities(...)
+```
+
+from:
+
+```text
+services/entity-service.ts
+```
+
+This is very close to:
+
+```java
+@Service
+public class EntityService {
+
+    public List<Entity> searchEntities(String query) {
+        ...
+    }
+}
+```
+
+And the same service also provides:
+
+```ts
+getEntityById(id)
+```
+
+Conceptually:
+
+```java
+public Entity getEntityById(String id) {
+    ...
+}
+```
+
+The project's architecture describes this specifically as a **server-only entity directory adapter**. 
+
+---
+
+# 6. `entity-data.ts` = currently your mock Repository/DB
+
+This is where your mock entities are coming from.
+
+You previously showed:
+
+```ts
+export function searchEntityRecords(query: string): Entity[] {
+```
+
+and:
+
+```ts
+export function findEntityRecord(id: string): Entity | null {
+```
+
+So right now think:
+
+```text
+entity-data.ts
+≈
+Repository + mock database
+```
+
+Java might be:
+
+```java
+@Repository
+public interface EntityRepository
+        extends JpaRepository<Entity, String> {
+
+    Optional<Entity> findById(String id);
+}
+```
+
+Except your current Next.js demo isn't actually using a database; it's working against fictional fixture/mock records. The supplied project documentation explicitly says the demo uses fictional fixtures rather than live customer data. 
+
+---
+
+# 7. `types.ts` = your POJO / DTO
+
+This is probably the easiest mapping for you.
+
+You might have TypeScript:
+
+```ts
+export interface Entity {
+    id: string;
+    name: string;
+    country: string;
+    sector: string;
+}
+```
+
+Think Java:
+
+```java
+public class Entity {
+
+    private String id;
+    private String name;
+    private String country;
+    private String sector;
+
+    // getters
+    // setters
+}
+```
+
+or modern Java:
+
+```java
+public record Entity(
+    String id,
+    String name,
+    String country,
+    String sector
+) {}
+```
+
+So:
+
+```text
+TypeScript interface/type
+        ≈
+Java DTO / POJO
+```
+
+---
+
+# Full Search flow
+
+Now put everything together.
+
+User searches:
+
+```text
+Meridian
+```
+
+Flow:
+
+```text
+                 FRONTEND
+                    │
+                    ▼
+        entity-search.tsx
+        User enters "Meridian"
+                    │
+                    ▼
+             entity-api.ts
+          fetch("/api/entities")
+                    │
+================ NETWORK/API ================
+                    │
+                    ▼
+       app/api/entities/route.ts
+             CONTROLLER
+                    │
+             Validate request
+              schema.ts
+                    │
+                    ▼
+          entity-service.ts
+              SERVICE
+                    │
+                    ▼
+           entity-data.ts
+       MOCK REPOSITORY / DATA
+                    │
+                    ▼
+               Entity[]
+                    │
+                    ▼
+             Controller
+                    │
+                 JSON
+                    │
+                    ▼
+             entity-api.ts
+                    │
+                    ▼
+          entity-search.tsx
+                    │
+                    ▼
+            Show results
+```
+
+That is extremely similar to what you're already used to.
+
+---
+
+# Now your second flow: Open Case
+
+This one is slightly different and important.
+
+You click:
+
+```text
+Open Case
+```
+
+Your code has:
+
+```tsx
+<Link href={`/entities/${entity.id}`}>
+    Open Case
+</Link>
+```
+
+For `ENT-001`:
+
+```text
+/entities/ENT-001
+```
+
+Next.js routes to:
+
+```text
+app/entities/[id]/page.tsx
+```
+
+Your actual page does:
+
+```tsx
+const { id } = await params;
+
+const entity = await getEntityById(id);
+
+if (!entity) notFound();
+
+return (
+    <CaseWorkspace
+        key={entity.id}
+        entity={entity}
+    />
+);
+```
+
+
+
+In Spring Boot thinking:
+
+```java
+@GetMapping("/entities/{id}")
+public Entity getEntity(
+        @PathVariable String id) {
+
+    return entityService.getEntityById(id);
+}
+```
+
+Except here `page.tsx` is not exactly a REST controller—it is a **server-rendered route/page**.
+
+The flow is:
+
+```text
+Click Open Case
+      ↓
+/entities/ENT-001
+      ↓
+[id]
+      ↓
+page.tsx
+      ↓
+params.id
+      ↓
+"ENT-001"
+      ↓
+getEntityById("ENT-001")
+      ↓
+entity-service.ts
+      ↓
+findEntityRecord("ENT-001")
+      ↓
+entity-data.ts
+      ↓
+Entity
+      ↓
+page.tsx
+      ↓
+<CaseWorkspace entity={entity}/>
+```
+
+---
+
+# Then what is `CaseWorkspace`?
+
+This is primarily your **interactive UI/business-workflow component**.
+
+The supplied source shows it receives:
+
+```tsx
+export function CaseWorkspace({
+    entity
+}: {
+    entity: Entity
+})
+```
+
+and manages the case using:
+
+```tsx
+const [state, dispatch] =
+    useReducer(caseReducer, initialCaseState);
+```
+
+It also calls the screening API when the user launches screening. 
+
+So don't map `CaseWorkspace` to a Java Service.
+
+Think:
+
+```text
+CaseWorkspace
+    =
+React screen/controller-like UI orchestration
+```
+
+It controls things such as:
+
+```text
+Overview
+Screening
+Assessment
+Memo
+Tabs
+Current state
+```
+
+---
+
+# Screening flow
+
+When the user clicks:
+
+```text
+Launch Screening Engine
+```
+
+the flow changes to:
+
+```text
+CaseWorkspace
+      ↓
+screening-api.ts
+      ↓
+POST /api/screenings
+      ↓
+app/api/screenings/route.ts
+      ↓
+screening-service.ts
+      ↓
+ScreeningReport
+      ↓
+JSON response
+      ↓
+CaseWorkspace
+      ↓
+AssessmentPanel
+```
+
+Your actual screening Controller equivalent is:
+
+```ts
+export async function POST(request: Request) {
+```
+
+It validates the JSON and eventually calls:
+
+```ts
+const report =
+    await runScreening(parsed.data.entityId);
+```
+
+and returns:
+
+```ts
+return NextResponse.json(report);
+```
+
+
+
+Spring equivalent:
+
+```java
+@RestController
+public class ScreeningController {
+
+    @PostMapping("/api/screenings")
+    public ScreeningReport screening(
+            @RequestBody ScreeningRequest request) {
+
+        return screeningService
+            .runScreening(request.getEntityId());
+    }
+}
+```
+
+---
+
+# So your whole application architecture
+
+I'd draw your application this way based on the supplied project:
+
+```text
+                   NEXT.JS APPLICATION
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+           FRONTEND               SERVER
+              │                     │
+              │                     │
+       React Components        API route.ts
+              │                 Controller
+              │                     │
+         *-api.ts                  schema
+        REST Client              Validation
+              │                     │
+              └──── HTTP ───────────┤
+                                    │
+                               *-service.ts
+                                  Service
+                                    │
+                                    ▼
+                              entity-data.ts
+                              Mock Data Store
+```
+
+And your Java mental mapping is:
+
+```text
+Next.js                         Spring Boot
+
+page.tsx / components          React frontend
+       │
+       ▼
+entity-api.ts                  Feign/REST client
+       │
+       ▼
+api/entities/route.ts          @RestController
+       │
+       ▼
+schema.ts                      Request DTO + @Valid
+       │
+       ▼
+entity-service.ts              @Service
+       │
+       ▼
+entity-data.ts                 @Repository / mock DB
+       │
+       ▼
+types.ts                       POJO / DTO
+```
+
+There is one architectural difference worth keeping clear: **your Next.js application has both frontend and backend/server responsibilities inside the same project**. That's why you see React `.tsx` components and also API `route.ts` files together. The project documentation deliberately separates browser-side API clients from server-only service adapters. 
+
+For your Java background, if you first identify **UI → API client → route/controller → service → data/type**, the code will become much easier to read.
